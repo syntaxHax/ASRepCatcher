@@ -25,7 +25,7 @@ decoder = asn1.Decoder()
 stop_arp_spoofing_flag = threading.Event()
 
 def display_banner():
-    print("""            _____ _____             _____      _       _               
+    print(r"""            _____ _____             _____      _       _               
      /\    / ____|  __ \           / ____|    | |     | |              
     /  \  | (___ | |__) |___ _ __ | |     __ _| |_ ___| |__   ___ _ __ 
    / /\ \  \___ \|  _  // _ \ '_ \| |    / _` | __/ __| '_ \ / _ \ '__|
@@ -134,14 +134,14 @@ if running_in_container() and not has_net_admin_cap() :
     with open('/etc/hostname') as f :
         hostname = f.read().strip()
     print('If you want to add the NET_ADMIN capability to this container, you can copy /tmp/add_net_cap.sh script and run it on your host.')
-    net_cap_script = '''#!/bin/bash
+    net_cap_script = r'''#!/bin/bash
 
 if [ "$EUID" -ne 0 ]
   then echo "Please run as root"
   exit
 fi
 
-container_name="'''+hostname+'''"
+container_name="__HOSTNAME__"
 hostconfig="$(docker inspect $container_name | grep HostsPath | awk -F '"' '{print $4}' | rev | cut -d/ -f 2- | rev)/hostconfig.json"
 grep -qE '"CapAdd":\[.*"NET_ADMIN".*\]' $hostconfig && echo "NET_ADMIN capabiliy already present for $container_name" && exit 0
 docker stop $container_name 1>/dev/null
@@ -150,9 +150,11 @@ sleep 2
 (systemctl restart docker || service docker restart) && docker start $container_name
 echo "CAP_NET capability added to $container_name !"
 '''
-    with open('/tmp/add_net_cap.sh', 'w') as f :
-        f.write(net_cap_script)
-    sys.exit(1)
+net_cap_script = net_cap_script.replace('__HOSTNAME__', hostname)
+    
+with open('/tmp/add_net_cap.sh', 'w') as f :
+    f.write(net_cap_script)
+sys.exit(1)
 
 
 
@@ -694,4 +696,3 @@ def main() :
         
 if __name__ == '__main__':
     main()
-
