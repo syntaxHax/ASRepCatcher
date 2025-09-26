@@ -151,14 +151,11 @@ sleep 2
 (systemctl restart docker || service docker restart) && docker start $container_name
 echo "CAP_NET capability added to $container_name !"
 '''
-net_cap_script = net_cap_script.replace('__HOSTNAME__', hostname)
-    
-with open('/tmp/add_net_cap.sh', 'w') as f :
-    f.write(net_cap_script)
-sys.exit(1)
+    net_cap_script = net_cap_script.replace('__HOSTNAME__', hostname)
 
-
-
+    with open('/tmp/add_net_cap.sh', 'w') as f :
+        f.write(net_cap_script)
+    sys.exit(1)
 
 if parameters.t is not None and parameters.tf is not None :
     logging.error('[!] Cannot use -t and -tf simultaneously')
